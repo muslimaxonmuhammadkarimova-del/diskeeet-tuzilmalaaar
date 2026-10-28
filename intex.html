@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kommivoyajer Masalasi (TSP) Simulyatsiyasi</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        canvas {
+            touch-action: none;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex flex-col">
+
+    <!-- Header / Nav -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 p-2.5 rounded-lg text-white">
+                    <i class="fa-solid fa-route text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-wide text-indigo-400">TSP Simulyatori</h1>
+                    <p class="text-xs text-gray-400">Kommivoyajer masalasini diskret usullar bilan yechish loyihasi</p>
+                </div>
+            </div>
+
+            <!-- Algoritm tanlash va Boshqaruv -->
+            <div class="flex flex-wrap items-center gap-3">
+                <select id="algoSelect" class="bg-gray-700 text-white text-sm rounded-lg border border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="brute">1. To'liq saralash (Brute Force - N <= 10)</option>
+                    <option value="nearest" selected>2. Eng yaqin qo'shni (Greedy NN)</option>
+                    <option value="2opt">3. 2-Opt Evristik usuli</option>
+                    <option value="ga">4. Genetik Algoritm (GA)</option>
+                </select>
+
+                <button id="startBtn" onclick="startSimulation()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition">
+                    <i class="fa-solid fa-play"></i> Boshlash
+                </button>
+                <button id="stopBtn" onclick="stopSimulation()" class="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition hidden">
+                    <i class="fa-solid fa-square"></i> To'xtatish
+                </button>
+                <button onclick="clearAll()" class="bg-gray-700 hover:bg-gray-600 text-white font-semibold px-4 py-2 rounded-lg transition">
+                    <i class="fa-solid fa-rotate-left"></i> Tozalash
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto p-4 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+
+        <!-- Left Column: Interactive Canvas & Visualizer -->
+        <div class="lg:col-span-2 flex flex-col gap-4">
+            
+            <!-- Canvas Card -->
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-md relative flex flex-col">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-md font-semibold text-gray-200 flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-indigo-400"></i> Shaharlar xaritasi (Canvas)
+                    </h2>
+                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                        <span>Tezlik:</span>
+                        <input type="range" id="speedRange" min="1" max="100" value="50" class="w-24 accent-indigo-500">
+                    </div>
+                </div>
+
+                <div class="relative w-full h-[420px] bg-gray-950 rounded-lg overflow-hidden border border-gray-800">
+                    <canvas id="tspCanvas" class="w-full h-full cursor-crosshair"></canvas>
+                    <div id="canvasOverlay" class="absolute bottom-3 left-3 bg-gray-900/80 backdrop-blur-sm px-3 py-1.5 rounded text-xs text-gray-300 border border-gray-700">
+                        Shaharni qo'shish uchun xaritaga bosing
+                    </div>
+                </div>
+
+                <!-- Presets / Quick actions -->
+                <div class="flex flex-wrap gap-2 mt-4 items-center justify-between">
+                    <div class="flex gap-2">
+                        <button onclick="generateRandomCities(5)" class="bg-gray-700 hover:bg-gray-600 text-xs text-gray-200 px-3 py-1.5 rounded transition">
+                            + 5 ta shahar
+                        </button>
+                        <button onclick="generateRandomCities(10)" class="bg-gray-700 hover:bg-gray-600 text-xs text-gray-200 px-3 py-1.5 rounded transition">
+                            + 10 ta shahar
+                        </button>
+                        <button onclick="generateRandomCities(20)" class="bg-gray-700 hover:bg-gray-600 text-xs text-gray-200 px-3 py-1.5 rounded transition">
+                            + 20 ta shahar
+                        </button>
+                    </div>
+                    <span id="cityCountTag" class="text-xs text-indigo-400 font-mono">Jami shaharlar: 0</span>
+                </div>
+            </div>
+
+            <!-- Distance Matrix Section -->
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-md">
+                <h2 class="text-md font-semibold text-gray-200 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-table-cells text-indigo-400"></i> Masofalar Matratsasi ($D_{ij}$)
+                </h2>
+                <div id="matrixContainer" class="overflow-x-auto custom-scrollbar max-h-48 text-xs">
+                    <p class="text-gray-500 italic text-center py-4">Matritani shakllantirish uchun shaharlar qo'shing...</p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Control & Analytics -->
+        <div class="flex flex-col gap-4">
+
+            <!-- Realtime Metrics -->
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-md flex flex-col gap-3">
+                <h2 class="text-md font-semibold text-gray-200 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-indigo-400"></i> Simulyatsiya Natijalari
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-900/60 p-3 rounded-lg border border-gray-700/50">
+                        <span class="text-xs text-gray-400 block">Eng qisqa masofa</span>
+                        <span id="bestDistanceText" class="text-xl font-bold text-emerald-400">0 km</span>
+                    </div>
+                    <div class="bg-gray-900/60 p-3 rounded-lg border border-gray-700/50">
+                        <span class="text-xs text-gray-400 block">Sarflangan vaqt</span>
+                        <span id="executionTimeText" class="text-xl font-bold text-indigo-400">0 ms</span>
+                    </div>
+                    <div class="bg-gray-900/60 p-3 rounded-lg border border-gray-700/50">
+                        <span class="text-xs text-gray-400 block">Tekshirilgan Yo'llar</span>
+                        <span id="iterationsText" class="text-xl font-bold text-amber-400">0</span>
+                    </div>
+                    <div class="bg-gray-900/60 p-3 rounded-lg border border-gray-700/50">
+                        <span class="text-xs text-gray-400 block">Holat</span>
+                        <span id="statusText" class="text-sm font-semibold text-gray-300">Kutilmoqda</span>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <span class="text-xs text-gray-400 block mb-1">Eng maqbul marshrut ketma-ketligi:</span>
+                    <div id="routePathText" class="bg-gray-950 p-2.5 rounded border border-gray-800 text-xs font-mono text-indigo-300 break-words max-h-20 overflow-y-auto custom-scrollbar">
+                        -
+                    </div>
+                </div>
+            </div>
+
+            <!-- Comparison Chart -->
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-md">
+                <h2 class="text-md font-semibold text-gray-200 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-bar text-indigo-400"></i> Algoritmlar Solishtirmasi
+                </h2>
+                <div class="h-48 relative">
+                    <canvas id="comparisonChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Theory Card -->
+            <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-md flex-1 text-xs text-gray-400 space-y-2">
+                <h3 class="font-bold text-gray-200 text-sm">Masala haqida:</h3>
+                <p>
+                    <strong>Kommivoyajer masalasi (TSP)</strong> — berilgan $N$ ta shahar va ular orasidagi masofalar asosida har bir shaharga faqat bir marta tashrif buyurib, boshlang'ich nuqtaga qaytadigan **eng qisqa yopiq yo'lni (Gamilton siklini)** topish masalasidir.
+                </p>
+                <p>
+                    Ushbu masala <strong>NP-to
