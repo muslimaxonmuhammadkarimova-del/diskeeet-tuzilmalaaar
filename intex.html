@@ -171,4 +171,484 @@
                     <strong>Kommivoyajer masalasi (TSP)</strong> — berilgan $N$ ta shahar va ular orasidagi masofalar asosida har bir shaharga faqat bir marta tashrif buyurib, boshlang'ich nuqtaga qaytadigan **eng qisqa yopiq yo'lni (Gamilton siklini)** topish masalasidir.
                 </p>
                 <p>
-                    Ushbu masala <strong>NP-to
+                    Ushbu masala <strong>NP-to'liq (NP-hard)</strong> sinfiga kiradi. Kombinatorik murakkabligi: $(N-1)! / 2$.
+                </p>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 border-t border-gray-700 py-3 text-center text-xs text-gray-400">
+        Kommivoyajer Masalasi Diskret Matematika Loyiha Ishi | Simulyatsiya Tizimi
+    </footer>
+
+    <!-- Logic JavaScript Code -->
+    <script>
+        const canvas = document.getElementById('tspCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let cities = [];
+        let isRunning = false;
+        let animationFrameId = null;
+        
+        // Chart initialization
+        let comparisonChart = null;
+        const chartData = {
+            labels: ['Brute Force', 'Greedy NN', '2-Opt', 'Genetik Algo'],
+            datasets: [{
+                label: 'Topilgan Masofa (px)',
+                data: [0, 0, 0, 0],
+                backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#10b981'],
+                borderRadius: 4
+            }]
+        };
+
+        function initChart() {
+            const chartCtx = document.getElementById('comparisonChart').getContext('2d');
+            comparisonChart = new Chart(chartCtx, {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#374151' },
+                            ticks: { color: '#9ca3af', font: { size: 10 } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#9ca3af', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            draw();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // Add City on Canvas Click
+        canvas.addEventListener('click', (e) => {
+            if (isRunning) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            cities.push({ id: cities.length, x, y, name: String.fromCharCode(65 + (cities.length % 26)) + (cities.length >= 26 ? Math.floor(cities.length/26) : '') });
+            updateCityUI();
+            draw();
+        });
+
+        function generateRandomCities(count) {
+            if (isRunning) return;
+            const padding = 40;
+            const w = canvas.width - padding * 2;
+            const h = canvas.height - padding * 2;
+            
+            for (let i = 0; i < count; i++) {
+                const x = Math.random() * w + padding;
+                const y = Math.random() * h + padding;
+                cities.push({ 
+                    id: cities.length, 
+                    x, 
+                    y, 
+                    name: String.fromCharCode(65 + (cities.length % 26)) + (cities.length >= 26 ? Math.floor(cities.length/26) : '') 
+                });
+            }
+            updateCityUI();
+            draw();
+        }
+
+        function clearAll() {
+            stopSimulation();
+            cities = [];
+            updateCityUI();
+            resetMetrics();
+            draw();
+        }
+
+        function updateCityUI() {
+            document.getElementById('cityCountTag').innerText = `Jami shaharlar: ${cities.length}`;
+            renderMatrix();
+        }
+
+        function resetMetrics() {
+            document.getElementById('bestDistanceText').innerText = '0 km';
+            document.getElementById('executionTimeText').innerText = '0 ms';
+            document.getElementById('iterationsText').innerText = '0';
+            document.getElementById('statusText').innerText = 'Kutilmoqda';
+            document.getElementById('routePathText').innerText = '-';
+        }
+
+        // Distance Matrix calculation
+        function calcDistance(c1, c2) {
+            const dx = c1.x - c2.x;
+            const dy = c1.y - c2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function getPathDistance(path) {
+            let dist = 0;
+            for (let i = 0; i < path.length; i++) {
+                const c1 = cities[path[i]];
+                const c2 = cities[path[(i + 1) % path.length]];
+                dist += calcDistance(c1, c2);
+            }
+            return dist;
+        }
+
+        function renderMatrix() {
+            const container = document.getElementById('matrixContainer');
+            if (cities.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 italic text-center py-4">Matritani shakllantirish uchun shaharlar qo'shing...</p>`;
+                return;
+            }
+
+            let html = `<table class="w-full text-center border-collapse border border-gray-700"><thead><tr><th class="p-1 border border-gray-700 bg-gray-900 text-indigo-400">#</th>`;
+            cities.forEach(c => {
+                html += `<th class="p-1 border border-gray-700 bg-gray-900 text-gray-300">${c.name}</th>`;
+            });
+            html += `</tr></thead><tbody>`;
+
+            cities.forEach((c1, i) => {
+                html += `<tr><td class="p-1 border border-gray-700 bg-gray-900 font-bold text-gray-300">${c1.name}</td>`;
+                cities.forEach((c2, j) => {
+                    const d = i === j ? 0 : Math.round(calcDistance(c1, c2));
+                    const bg = i === j ? 'bg-gray-900 text-gray-600' : 'bg-gray-800/40 text-gray-300';
+                    html += `<td class="p-1 border border-gray-700 ${bg}">${d}</td>`;
+                });
+                html += `</tr>`;
+            });
+            html += `</tbody></table>`;
+            container.innerHTML = html;
+        }
+
+        // Canvas Drawing Function
+        function draw(currentPath = [], bestPath = []) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw grid lines for clean UI
+            ctx.strokeStyle = '#1f2937';
+            ctx.lineWidth = 1;
+            const gridSize = 40;
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Draw Current Path (Searching process)
+            if (currentPath.length > 1) {
+                ctx.strokeStyle = '#6366f1';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                for (let i = 0; i < currentPath.length; i++) {
+                    const c1 = cities[currentPath[i]];
+                    const c2 = cities[currentPath[(i + 1) % currentPath.length]];
+                    ctx.moveTo(c1.x, c1.y);
+                    ctx.lineTo(c2.x, c2.y);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Draw Best Path
+            if (bestPath.length > 1) {
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < bestPath.length; i++) {
+                    const c1 = cities[bestPath[i]];
+                    const c2 = cities[bestPath[(i + 1) % bestPath.length]];
+                    ctx.moveTo(c1.x, c1.y);
+                    ctx.lineTo(c2.x, c2.y);
+                }
+                ctx.stroke();
+            }
+
+            // Draw Cities
+            cities.forEach((city, index) => {
+                ctx.beginPath();
+                ctx.arc(city.x, city.y, 12, 0, Math.PI * 2);
+                ctx.fillStyle = index === 0 ? '#ef4444' : '#3b82f6';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // City Name
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(city.name, city.x, city.y);
+            });
+        }
+
+        // ================= ALGORITHMS ================= //
+
+        // 1. Brute Force (To'liq saralash)
+        async function runBruteForce() {
+            const n = cities.length;
+            if (n > 10) {
+                alert("To'liq saralash usuli faqat 10 tagacha shahar uchun tavsiya etiladi (Vaqt murakkabligi N!). O'rniga boshqa algoritmni tanlang.");
+                stopSimulation();
+                return;
+            }
+
+            let indices = Array.from({length: n}, (_, i) => i);
+            let bestDist = Infinity;
+            let bestPath = [];
+            let iterations = 0;
+            const startTime = performance.now();
+
+            function* permute(arr, m = []) {
+                if (arr.length === 0) {
+                    yield m;
+                } else {
+                    for (let i = 0; i < arr.length; i++) {
+                        let curr = arr.slice();
+                        let next = curr.splice(i, 1);
+                        yield* permute(curr.slice(), m.concat(next));
+                    }
+                }
+            }
+
+            const generator = permute(indices);
+
+            for (let path of generator) {
+                if (!isRunning) return;
+                iterations++;
+                const dist = getPathDistance(path);
+                
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestPath = [...path];
+                    updateMetrics(bestDist, performance.now() - startTime, iterations, bestPath);
+                }
+
+                if (iterations % Math.floor(101 - document.getElementById('speedRange').value) === 0) {
+                    draw(path, bestPath);
+                    await new Promise(r => setTimeout(r, 10));
+                }
+            }
+
+            finishSimulation(bestDist, performance.now() - startTime, iterations, bestPath, 0);
+        }
+
+        // 2. Greedy Nearest Neighbor (Eng yaqin qo'shni)
+        async function runNearestNeighbor() {
+            const startTime = performance.now();
+            let unvisited = Array.from({length: cities.length}, (_, i) => i);
+            let currentPath = [unvisited.shift()];
+            let iterations = 0;
+
+            while (unvisited.length > 0 && isRunning) {
+                iterations++;
+                let lastCity = currentPath[currentPath.length - 1];
+                let nearestIdx = -1;
+                let minDist = Infinity;
+
+                for (let i = 0; i < unvisited.length; i++) {
+                    let candidate = unvisited[i];
+                    let d = calcDistance(cities[lastCity], cities[candidate]);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearestIdx = i;
+                    }
+                }
+
+                currentPath.push(unvisited.splice(nearestIdx, 1)[0]);
+                draw(currentPath, currentPath);
+                updateMetrics(getPathDistance(currentPath), performance.now() - startTime, iterations, currentPath);
+                await new Promise(r => setTimeout(r, 105 - document.getElementById('speedRange').value));
+            }
+
+            const finalDist = getPathDistance(currentPath);
+            finishSimulation(finalDist, performance.now() - startTime, iterations, currentPath, 1);
+        }
+
+        // 3. 2-Opt Algorithm
+        async function run2Opt() {
+            const startTime = performance.now();
+            let bestPath = Array.from({length: cities.length}, (_, i) => i);
+            let bestDist = getPathDistance(bestPath);
+            let improved = true;
+            let iterations = 0;
+
+            while (improved && isRunning) {
+                improved = false;
+                for (let i = 1; i < cities.length - 1; i++) {
+                    for (let j = i + 1; j < cities.length; j++) {
+                        if (!isRunning) return;
+                        iterations++;
+
+                        let newPath = bestPath.slice(0, i)
+                            .concat(bestPath.slice(i, j + 1).reverse())
+                            .concat(bestPath.slice(j + 1));
+                        
+                        let newDist = getPathDistance(newPath);
+
+                        if (newDist < bestDist) {
+                            bestDist = newDist;
+                            bestPath = newPath;
+                            improved = true;
+                            updateMetrics(bestDist, performance.now() - startTime, iterations, bestPath);
+                            draw(newPath, bestPath);
+                            await new Promise(r => setTimeout(r, 105 - document.getElementById('speedRange').value));
+                        }
+                    }
+                }
+            }
+
+            finishSimulation(bestDist, performance.now() - startTime, iterations, bestPath, 2);
+        }
+
+        // 4. Genetic Algorithm
+        async function runGeneticAlgorithm() {
+            const startTime = performance.now();
+            const popSize = 50;
+            const generations = 200;
+            const mutationRate = 0.1;
+
+            let population = [];
+            for (let i = 0; i < popSize; i++) {
+                let p = Array.from({length: cities.length}, (_, idx) => idx);
+                population.push(p.sort(() => Math.random() - 0.5));
+            }
+
+            let bestPath = population[0];
+            let bestDist = getPathDistance(bestPath);
+            let iterations = 0;
+
+            for (let gen = 0; gen < generations && isRunning; gen++) {
+                iterations++;
+
+                // Evaluate Fitness
+                population.sort((a, b) => getPathDistance(a) - getPathDistance(b));
+                
+                if (getPathDistance(population[0]) < bestDist) {
+                    bestDist = getPathDistance(population[0]);
+                    bestPath = population[0];
+                    updateMetrics(bestDist, performance.now() - startTime, iterations, bestPath);
+                }
+
+                // Crossover & Mutation (Create Next Gen)
+                let nextGen = population.slice(0, popSize / 2); // Keep top 50%
+                while (nextGen.length < popSize) {
+                    let parentA = nextGen[Math.floor(Math.random() * nextGen.length)];
+                    let parentB = nextGen[Math.floor(Math.random() * nextGen.length)];
+                    let child = crossover(parentA, parentB);
+                    if (Math.random() < mutationRate) mutate(child);
+                    nextGen.push(child);
+                }
+
+                population = nextGen;
+
+                if (gen % 2 === 0) {
+                    draw(population[0], bestPath);
+                    await new Promise(r => setTimeout(r, 105 - document.getElementById('speedRange').value));
+                }
+            }
+
+            finishSimulation(bestDist, performance.now() - startTime, iterations, bestPath, 3);
+        }
+
+        function crossover(parentA, parentB) {
+            const start = Math.floor(Math.random() * parentA.length);
+            const end = Math.floor(Math.random() * (parentA.length - start)) + start;
+            const slice = parentA.slice(start, end);
+            const remainder = parentB.filter(x => !slice.includes(x));
+            return [...slice, ...remainder];
+        }
+
+        function mutate(path) {
+            const i = Math.floor(Math.random() * path.length);
+            const j = Math.floor(Math.random() * path.length);
+            const temp = path[i];
+            path[i] = path[j];
+            path[j] = temp;
+        }
+
+        // Controller Handlers
+        function startSimulation() {
+            if (cities.length < 3) {
+                alert("Simulyatsiya uchun kamida 3 ta shahar joylashtiring!");
+                return;
+            }
+
+            isRunning = true;
+            document.getElementById('startBtn').classList.add('hidden');
+            document.getElementById('stopBtn').classList.remove('hidden');
+            document.getElementById('statusText').innerText = "Bajarilmoqda...";
+            document.getElementById('statusText').className = "text-sm font-semibold text-amber-400";
+
+            const algo = document.getElementById('algoSelect').value;
+            if (algo === 'brute') runBruteForce();
+            else if (algo === 'nearest') runNearestNeighbor();
+            else if (algo === '2opt') run2Opt();
+            else if (algo === 'ga') runGeneticAlgorithm();
+        }
+
+        function stopSimulation() {
+            isRunning = false;
+            document.getElementById('startBtn').classList.remove('hidden');
+            document.getElementById('stopBtn').classList.add('hidden');
+            document.getElementById('statusText').innerText = "To'xtatildi";
+            document.getElementById('statusText').className = "text-sm font-semibold text-rose-400";
+        }
+
+        function updateMetrics(dist, time, iterations, path) {
+            document.getElementById('bestDistanceText').innerText = `${Math.round(dist)} px`;
+            document.getElementById('executionTimeText').innerText = `${Math.round(time)} ms`;
+            document.getElementById('iterationsText').innerText = iterations;
+            
+            const pathNames = path.map(i => cities[i].name).join(' → ') + ` → ${cities[path[0]].name}`;
+            document.getElementById('routePathText').innerText = pathNames;
+        }
+
+        function finishSimulation(bestDist, time, iterations, bestPath, chartIndex) {
+            isRunning = false;
+            document.getElementById('startBtn').classList.remove('hidden');
+            document.getElementById('stopBtn').classList.add('hidden');
+            document.getElementById('statusText').innerText = "Yakunlandi";
+            document.getElementById('statusText').className = "text-sm font-semibold text-emerald-400";
+
+            draw([], bestPath);
+            updateMetrics(bestDist, time, iterations, bestPath);
+
+            // Update Chart Data
+            chartData.datasets[0].data[chartIndex] = Math.round(bestDist);
+            comparisonChart.update();
+        }
+
+        // Canvas Setup & Initial State
+        window.onload = () => {
+            initChart();
+            resizeCanvas();
+            generateRandomCities(6);
+        };
+    </script>
+</body>
+</html>
